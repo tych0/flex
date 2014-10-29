@@ -2,6 +2,7 @@
 Obtaining the code
 ------------------
 
+    # You need to have mercrurial installed.
     go get github.com/niemeyer/flex
 
 Running the tool
