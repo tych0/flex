@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/user"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -54,7 +55,7 @@ func checkmap(fname string, username string) (uint, uint, error) {
 		}
 	}
 
-	return 0, 0, fmt.Errorf("User %q has no subuids.", username)
+	return 0, 0, fmt.Errorf("User %q has no %ss.", username, path.Base(fname))
 }
 
 func newIdmap() (*idmap, error) {
