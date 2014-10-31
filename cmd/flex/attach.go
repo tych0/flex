@@ -26,12 +26,8 @@ func (c *attachCmd) usage() string {
 func (c *attachCmd) flags() {}
 
 func (c *attachCmd) run(args []string) error {
-	name := "foo"
 	if len(args) > 1 {
 		return errArgs
-	}
-	if len(args) == 1 {
-		name = args[0]
 	}
 	config, err := flex.LoadConfig()
 	if err != nil {
@@ -39,7 +35,7 @@ func (c *attachCmd) run(args []string) error {
 	}
 
 	// NewClient will ping the server to test the connection before returning.
-	d, err := flex.NewClient(config)
+	d, name, err := flex.NewClient(config, args[0])
 	if err != nil {
 		return err
 	}

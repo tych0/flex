@@ -54,6 +54,10 @@ func LoadConfig() (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse configuration: %v", err)
 	}
+	if c.Remotes == nil {
+		c.Remotes = make(map[string]RemoteConfig)
+	}
+
 	return &c, nil
 }
 

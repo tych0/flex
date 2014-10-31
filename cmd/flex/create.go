@@ -20,20 +20,25 @@ func (c *createCmd) usage() string {
 func (c *createCmd) flags() {}
 
 func (c *createCmd) run(args []string) error {
-	name := "foo"
 	if len(args) > 1 {
 		return errArgs
 	}
+
+	var containerRef string
 	if len(args) == 1 {
-		name = args[0]
+		containerRef = args[0]
+	} else {
+		// TODO: come up with a random name a. la. juju/maas
+		containerRef = "foo"
 	}
+
 	config, err := flex.LoadConfig()
 	if err != nil {
 		return err
 	}
 
 	// NewClient will ping the server to test the connection before returning.
-	d, err := flex.NewClient(config)
+	d, name, err := flex.NewClient(config, containerRef)
 	if err != nil {
 		return err
 	}

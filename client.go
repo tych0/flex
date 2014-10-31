@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strings"
 )
 
 // Client can talk to a flex daemon.
@@ -17,7 +18,7 @@ type Client struct {
 }
 
 // NewClient returns a new flex client.
-func NewClient(config *Config) (*Client, error) {
+func NewClient(config *Config, raw string) (*Client, string, error) {
 	c := Client{
 		config: *config,
 		http: http.Client{
@@ -25,18 +26,31 @@ func NewClient(config *Config) (*Client, error) {
 			//Timeout: 10 * time.Second,
 		},
 	}
-	if config.DefaultRemote == "" || config.DefaultRemote == "local" {
+
+	result := strings.SplitN(raw, ":", 2)
+	var remote string
+	var container string
+
+	if len(result) == 1 {
+		remote = config.DefaultRemote
+		container = result[0]
+	} else {
+		remote = result[0]
+		container = result[1]
+	}
+
+	if remote == "" || remote == "local" {
 		c.baseURL = "http://unix.socket"
 		c.http.Transport = &unixTransport
-	} else if r, ok := config.Remotes[config.DefaultRemote]; ok {
+	} else if r, ok := config.Remotes[remote]; ok {
 		c.baseURL = "http://" + r.Addr
 	} else {
-		return nil, fmt.Errorf("unknown remote name: %q", config.DefaultRemote)
+		return nil, "", fmt.Errorf("unknown remote name: %q", config.DefaultRemote)
 	}
 	if err := c.Ping(); err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return &c, nil
+	return &c, container, nil
 }
 
 // Ping pings the daemon to see if it is up listening and working.

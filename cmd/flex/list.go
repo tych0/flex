@@ -20,7 +20,7 @@ func (c *listCmd) usage() string {
 func (c *listCmd) flags() {}
 
 func (c *listCmd) run(args []string) error {
-	if len(args) > 0 {
+	if len(args) > 1 {
 		return errArgs
 	}
 	config, err := flex.LoadConfig()
@@ -28,8 +28,14 @@ func (c *listCmd) run(args []string) error {
 		return err
 	}
 
-	// NewClient will ping the server to test the connection before returning.
-	d, err := flex.NewClient(config)
+	var remote string
+	if len(args) == 1 {
+		remote = args[0]
+	} else {
+		remote = config.DefaultRemote
+	}
+
+	d, _, err := flex.NewClient(config, remote)
 	if err != nil {
 		return err
 	}
