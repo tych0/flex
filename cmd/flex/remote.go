@@ -10,6 +10,8 @@ type remoteCmd struct {
 }
 
 const remoteUsage = `
+Manage remote flex daemons
+
 flex remote add <name> <url>         Add the remote <name> at <url>.
 flex remote rm <name>                Remove the remote <name>.
 flex remote list                     List all remotes.
