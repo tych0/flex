@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"gopkg.in/lxc/go-lxc.v2"
@@ -45,6 +46,9 @@ func StartDaemon(config *Config) (*Daemon, error) {
 	d.mux.HandleFunc("/list", d.serveList)
 	d.mux.HandleFunc("/create", d.serveCreate)
 	d.mux.HandleFunc("/attach", d.serveAttach)
+	d.mux.HandleFunc("/checkpoint", d.serveCheckpoint)
+	d.mux.HandleFunc("/restore", d.serveRestore)
+	d.mux.HandleFunc("/sendContainer", d.serveSendContainer)
 
 	var err error
 	d.id_map, err = newIdmap()
@@ -396,4 +400,169 @@ func buildByNameServe(function string, f byname, d *Daemon) func(http.ResponseWr
 			return
 		}
 	}
+}
+
+func makeCheckpointPath(name string, id string) string {
+	return varPath("checkpoints", name, id)
+}
+
+func (d *Daemon) serveCheckpoint(w http.ResponseWriter, r *http.Request) {
+	name := r.FormValue("name")
+	if name == "" {
+		fmt.Fprintf(w, "failed parsing name")
+		return
+	}
+
+	c, err := lxc.NewContainer(name, d.lxcpath)
+	if err != nil {
+		fmt.Fprintf(w, "failed getting container")
+		return
+	}
+
+	err = os.MkdirAll(varPath("checkpoints", name), 0700)
+	if err != nil {
+		fmt.Fprintf(w, "failed making checkpoint directory")
+		return
+	}
+
+	path := ""
+	id := -1
+	/* We probably want to be a bit smarter here... */
+	for i := 0; i < 1000; i++ {
+		tmp := makeCheckpointPath(name, string(i))
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			path = tmp
+			id = i
+			break
+		}
+	}
+
+	if id < 0 {
+		fmt.Fprintf(w, "Too many checkpoints?")
+		return
+	}
+
+	err = os.MkdirAll(path, 0700)
+	if err != nil {
+		fmt.Fprintf(w, "Failed making checkpoint dir")
+		return
+	}
+
+	stop := r.FormValue("stop") == ""
+	verbose := r.FormValue("verbose") == ""
+
+	err = c.Checkpoint(path, stop, verbose)
+	if err != nil {
+		fmt.Fprintf(w, "Checkpoint failed")
+		return
+	}
+
+	fmt.Fprintf(w, string(id))
+}
+
+func (d *Daemon) serveRestore(w http.ResponseWriter, r *http.Request) {
+
+	name := r.FormValue("name")
+	if name == "" {
+		fmt.Fprintf(w, "failed parsing name")
+		return
+	}
+
+	c, err := lxc.NewContainer(name, d.lxcpath)
+	if err != nil {
+		fmt.Fprintf(w, "failed getting container")
+		return
+	}
+
+	id := r.FormValue("id")
+
+	path := makeCheckpointPath(name, id)
+	fi, err := os.Stat(path)
+	if err != nil {
+		fmt.Fprintf(w, "checkpoint doesn't exist!")
+		return
+	}
+
+	if !fi.IsDir() {
+		fmt.Fprintf(w, "checkpoint isn't a directory")
+		return
+	}
+
+	verbose := r.FormValue("verbose") == ""
+
+	err = c.Restore(path, verbose)
+	if err != nil {
+		fmt.Fprintf(w, "restore failed!")
+		return
+	}
+
+	fmt.Fprintf(w, "restore success!")
+}
+
+/*
+ * This probably isn't how we want to do this forever, because it requires
+ * ssh keys be exchanged between the servers, which isn't ideal. I wasn't sure
+ * of the best way to upload the rootfs/images to the remote, though, so I
+ * used rsync for now.
+ *
+ * XXX: this also assumes that the flexpaths are the same on both this host
+ * and the remote host; ideally we'd ask the remote where to sync to (or
+ * better yet, just send the files and let the remote decide where to put
+ * them).
+ */
+
+func doRsync(remote string, p string) error {
+	/* rsync needs the trailing / to sync directories... */
+	rsyncPath := p + "/"
+	remotePath := remote + ":" + rsyncPath
+	cmd := exec.Command("rsync", "-rltzha", "--devices", "--rsync-path=\"sudo rsync\"", rsyncPath, remotePath)
+
+	return cmd.Run()
+}
+
+func (d *Daemon) serveSendContainer(w http.ResponseWriter, r *http.Request) {
+
+	name := r.FormValue("name")
+	if name == "" {
+		fmt.Fprintf(w, "no name?")
+		return
+	}
+
+	/* It is ok to not provide a checkpoint id, that just means you're
+	 * doing an offline send. */
+	checkpoint := r.FormValue("checkpoint")
+
+	remote := r.FormValue("remote")
+	if remote == "" {
+		fmt.Fprintf(w, "error parsing remote")
+		return
+	}
+
+	if checkpoint != "" {
+		id := r.FormValue("id")
+
+		path := makeCheckpointPath(name, id)
+		fi, err := os.Stat(path)
+		if err != nil {
+			fmt.Fprintf(w, "checkpoint doesn't exist!")
+			return
+		}
+
+		if !fi.IsDir() {
+			fmt.Fprintf(w, "checkpoint isn't a directory")
+			return
+		}
+
+		if doRsync(remote, path) != nil {
+			fmt.Fprintf(w, "rsync of checkpoint failed!")
+			return
+		}
+	}
+
+	if doRsync(remote, filepath.Join(d.lxcpath, name)) != nil {
+		fmt.Fprintf(w, "rsync of container failed!")
+		return
+	}
+
+	fmt.Fprintf(w, "send successful!")
 }

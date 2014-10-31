@@ -13,6 +13,7 @@ import (
 // Client can talk to a flex daemon.
 type Client struct {
 	config  Config
+	Remote  *RemoteConfig
 	http    http.Client
 	baseURL string
 }
@@ -44,6 +45,7 @@ func NewClient(config *Config, raw string) (*Client, string, error) {
 		c.http.Transport = &unixTransport
 	} else if r, ok := config.Remotes[remote]; ok {
 		c.baseURL = "http://" + r.Addr
+		c.Remote = &r
 	} else {
 		return nil, "", fmt.Errorf("unknown remote name: %q", config.DefaultRemote)
 	}
@@ -129,6 +131,37 @@ func (c *Client) Stop(name string) (string, error) {
 
 func (c *Client) Status(name string) (string, error) {
 	return c.CallByName("status", name)
+}
+
+func (c *Client) Checkpoint(name string, stop bool, verbose bool) (string, error) {
+	parms := map[string]string{"name": name}
+	if stop {
+		parms["stop"] = "true"
+	}
+	if verbose {
+		parms["verbose"] = "verbose"
+	}
+
+	return c.getstr("/checkpoint", parms)
+}
+
+func (c *Client) Restore(name string, id int, verbose bool) (string, error) {
+	parms := map[string]string{"name": name, "id": string(id)}
+	if verbose {
+		parms["verbose"] = "verbose"
+	}
+
+	return c.getstr("/checkpoint", parms)
+}
+
+func (c *Client) SendContainer(remote *RemoteConfig, name string, id int) (string, error) {
+	host := remote.Addr
+	params := map[string]string{"name": name, "remote": host}
+	if id >= 0 {
+		params["id"] = string(id)
+	}
+
+	return c.getstr("sendContainer", params)
 }
 
 func (c *Client) getstr(base string, args map[string]string) (string, error) {
