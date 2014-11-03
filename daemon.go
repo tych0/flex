@@ -451,7 +451,8 @@ func (d *Daemon) serveCheckpoint(w http.ResponseWriter, r *http.Request) {
 	stop := r.FormValue("stop") == ""
 	verbose := r.FormValue("verbose") == ""
 
-	err = c.Checkpoint(path, stop, verbose)
+
+	err = c.Checkpoint(lxc.CheckpointOpts{path, stop, verbose})
 	if err != nil {
 		fmt.Fprintf(w, "Checkpoint failed")
 		return
@@ -490,7 +491,7 @@ func (d *Daemon) serveRestore(w http.ResponseWriter, r *http.Request) {
 
 	verbose := r.FormValue("verbose") == ""
 
-	err = c.Restore(path, verbose)
+	err = c.Restore(lxc.RestoreOpts{path, verbose})
 	if err != nil {
 		fmt.Fprintf(w, "restore failed!")
 		return
